@@ -42,7 +42,10 @@
       name="senaite.referral.setuphandler"
       title="SENAITE.REFERRAL Setup Handler"
       description="Run various configuration actions"
-      handler="senaite.referral.setuphandlers.setup_handler"/>
+      handler="senaite.referral.setuphandlers.setup_handler">
+    <depends name="typeinfo"/>
+    <depends name="workflow"/>
+  </genericsetup:importStep>
 
   <!-- Uninstall profile -->
   <genericsetup:registerProfile
