@@ -22,6 +22,8 @@ from collections import OrderedDict
 
 from bika.lims import api
 from bika.lims.api import UID_CATALOG
+from plone import api as ploneapi
+from plone.app.dexterity.behaviors.exclfromnav import IExcludeFromNavigation
 from senaite.core.api.workflow import update_workflow
 from senaite.core.registry import get_registry_record
 from senaite.core.registry import set_registry_record
@@ -285,24 +287,17 @@ def add_portal_folders(portal):
 def display_in_nav(obj):
     """Makes an object to be displayed in the navigation bar
     """
+    registry_id = "plone.displayed_types"
     portal_type = api.get_portal_type(obj)
+    displayed = ploneapi.portal.get_registry_record(registry_id, default=())
+    if portal_type not in displayed:
+        displayed += (portal_type, )
+        ploneapi.portal.set_registry_record(registry_id, displayed)
 
-    # remove from senaite setup's sidebar_skip_types
-    setup = api.get_senaite_setup()
-    skip = setup.getSidebarSkipTypes()
-    if skip and portal_type in skip:
-        skip = tuple(pt for pt in skip if pt != portal_type)
-        setup.setSidebarSkipTypes(skip)
-
-    # if a root folder, add to senaite setup's sidebar_folders
-    setup = api.get_senaite_setup()
-    portal = api.get_portal()
-    if api.get_parent(obj) == portal:
-        obj_id = api.get_id(obj)
-        folders = setup.getSidebarFolders()
-        if obj_id not in folders:
-            folders += (obj_id, )
-            setup.setSidebarFolders(folders)
+    nav_exclude = IExcludeFromNavigation(obj, None)
+    if nav_exclude:
+        nav_exclude.exclude_from_nav = False
+        obj.reindexObject(idxs=["exclude_from_nav"])
 
 
 def setup_workflows(portal):
