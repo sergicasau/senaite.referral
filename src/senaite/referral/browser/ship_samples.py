@@ -22,6 +22,7 @@ from plone.memoize import view
 from Products.Five.browser.pagetemplatefile import ViewPageTemplateFile
 from senaite.referral import messageFactory as _
 from senaite.referral.browser import BaseView
+from senaite.referral.catalog import SHIPMENT_CATALOG
 from senaite.referral.interfaces import IOutboundSampleShipment
 from senaite.referral.workflow import ship_sample
 
@@ -81,6 +82,19 @@ class ShipSamplesView(BaseView):
             shipment = None
 
         return shipment
+
+    @view.memoize
+    def get_shipments(self):
+        """Return active outbound shipments that accept samples.
+        """
+        query = {
+            "portal_type": "OutboundSampleShipment",
+            "review_state": "preparation",
+            "is_active": True,
+            "sort_on": "sortable_title",
+            "sort_order": "ascending",
+        }
+        return api.search(query, SHIPMENT_CATALOG)
 
     @view.memoize
     def get_samples_data(self):

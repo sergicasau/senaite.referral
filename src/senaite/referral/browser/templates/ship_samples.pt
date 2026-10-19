@@ -4,19 +4,6 @@
       metal:use-macro="here/main_template/macros/master"
       i18n:domain="senaite.referral">
 
-  <head>
-    <metal:block fill-slot="javascript_head_slot"
-                 tal:define="portal context/@@plone_portal_state/portal;">
-      <script type="text/javascript" tal:attributes="src string:${portal/absolute_url}/bika_widgets/referencewidget.js"></script>
-    </metal:block>
-
-    <metal:block fill-slot="style_slot"
-                 tal:define="portal context/@@plone_portal_state/portal;">
-      <link rel="stylesheet" type="text/css" media="all" href=""
-            tal:attributes="href string:${portal/absolute_url}/bika_widgets/referencewidget.css"/>
-    </metal:block>
-  </head>
-
   <body>
     <!-- Title -->
     <metal:title fill-slot="content-title">
@@ -68,43 +55,18 @@
             </table>
 
             <!-- Form Controls -->
-            <div class="form-group field ArchetypesReferenceWidget">
+            <div class="form-group field">
 
-              <label i18n:translate="" for="shipment">Shipment</label>
-              <input name="shipment"
-                     type="text"
-                     ui_item="getId"
-                     autocomplete="false"
-                     class="blurrable firstToFocus referencewidget"
-                     base_query='{
-                       "portal_type": "OutboundSampleShipment",
-                       "review_state": "preparation",
-                       "is_active": true,
-                       "sort_on": "sortable_title",
-                       "sort_order": "ascending"
-                     }'
-                     search_query='{}'
-                     catalog_name="senaite_catalog_shipment"
-                     combogrid_options='{
-                      "colModel": [
-                        {"columnName": "getId", "align": "left", "label": "Id", "width": "15"},
-                        {"columnName": "UID", "hidden": true}
-                      ],
-                      "search_fields": ["listing_searchable_text"],
-                      "catalog_name": "senaite_catalog_shipment",
-                      "url": "referencewidget_search",
-                      "showOn": true,
-                      "searchIcon": true,
-                      "minLength": "0",
-                      "force_all": true,
-                      "width": "700px",
-                      "portal_types": {}
-                     }'
-              />
-              <input type="hidden"
-                     id="shipment_uid"
-                     name="shipment_uid"
-                     value="" />
+              <label i18n:translate="" for="shipment_uid">Shipment</label>
+              <select id="shipment_uid"
+                      name="shipment_uid"
+                      class="form-control firstToFocus"
+                      required="required">
+                <option value="" i18n:translate="">Select a shipment</option>
+                <option tal:repeat="shipment python:view.get_shipments()"
+                        tal:attributes="value shipment/UID"
+                        tal:content="shipment/getId"/>
+              </select>
 
               <input class="btn btn-sm btn-primary allowMultiSubmit"
                      type="submit"
