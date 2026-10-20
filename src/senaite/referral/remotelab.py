@@ -89,6 +89,18 @@ def get_object_info(obj):
     sm = SuperModel(obj)
     info = sm.to_dict()
     basic_info.update(info)
+    if IAnalysisRequest.providedBy(obj):
+        basic_info.update({
+            "referral_origin_lab_code": get_field_value(
+                obj, "ReferralOriginLabCode", ""
+            ),
+            "referral_primary_uid": get_field_value(
+                obj, "ReferralPrimaryUID", ""
+            ),
+            "referral_partition_uid": get_field_value(
+                obj, "ReferralPartitionUID", ""
+            ),
+        })
     return basic_info
 
 
@@ -324,6 +336,18 @@ class RemoteLab(object):
                 "uid": api.get_uid(sample),
                 "referring_id": sample.getClientSampleID(),
                 "shipment_id": shipment.getShipmentID(),
+                "selective_referral": bool(get_field_value(
+                    sample, "ReferralPartitionUID", ""
+                )),
+                "origin_lab_code": get_field_value(
+                    sample, "ReferralOriginLabCode", ""
+                ),
+                "origin_primary_uid": get_field_value(
+                    sample, "ReferralPrimaryUID", ""
+                ),
+                "origin_partition_uid": get_field_value(
+                    sample, "ReferralPartitionUID", ""
+                ),
                 "analyses": analyses_info,
             }
 
@@ -338,6 +362,16 @@ class RemoteLab(object):
                 "retest_of": analysis.getRawRetestOf(),
                 "hidden": analysis.getHidden(),
                 "keyword": analysis.getKeyword(),
+                "delegation_id": get_field_value(
+                    analysis, "ReferralDelegationID", ""
+                ),
+                "source_analysis_uid": get_field_value(
+                    analysis, "ReferralSourceAnalysisUID", ""
+                ),
+                "origin_lab_code": get_field_value(
+                    analysis, "ReferralOriginLabCode", ""
+                ),
+                "is_retest": bool(analysis.getRawRetestOf()),
                 "result": analysis.getResult(),
                 "result_options": analysis.getResultOptions(),
                 "interim_fields": analysis.getInterimFields(),

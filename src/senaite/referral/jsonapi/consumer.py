@@ -25,6 +25,8 @@ from plone.memoize.instance import memoize
 from senaite.jsonapi.interfaces import IPushConsumer
 from senaite.referral import utils
 from senaite.referral.catalog import SHIPMENT_CATALOG
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import is_referral_partition
 from senaite.referral.workflow import change_workflow_state
 from zope.interface import implementer
 
@@ -251,6 +253,31 @@ class ReferralConsumer(BaseConsumer):
         """Returns the AnalysisRequest object from current instance that is
         related with the information provided in the item passed-in, if any
         """
+        partition_uid = self.get_value(
+            item, "referral_partition_uid", default=None
+        )
+        if partition_uid:
+            sample = api.get_object(partition_uid, default=None)
+            if not is_referral_partition(sample):
+                raise ValueError(
+                    "Referral partition not found: {}".format(partition_uid)
+                )
+            laboratory = get_partition_laboratory(sample)
+            if not laboratory or laboratory.getCode() != self.lab_code:
+                raise ValueError(
+                    "Referral partition does not belong to laboratory '{}'"
+                    .format(self.lab_code)
+                )
+            while self.is_invalidated(sample):
+                sample = sample.getRetest()
+                if not sample:
+                    raise ValueError(
+                        "No retest found for referral partition '{}'".format(
+                            partition_uid
+                        )
+                    )
+            return sample
+
         original_id = self.get_value(item, "ClientSampleID", default=None)
         original_id = self.get_value(item, "referring_id", default=original_id)
         if not original_id:

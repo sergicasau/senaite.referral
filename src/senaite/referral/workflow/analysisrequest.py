@@ -18,16 +18,27 @@
 # Copyright 2021-2022 by it's authors.
 # Some rights reserved, see README and LICENSE.
 
+from bika.lims import api
+from bika.lims.interfaces import IRejected
+from bika.lims.interfaces import IRetracted
+from bika.lims.utils import changeWorkflowState as set_workflow_state
+from bika.lims.utils.analysis import create_retest as create_analysis_retest
 from bika.lims.workflow import doActionFor
+from bika.lims.workflow import isTransitionAllowed
 from senaite.core.workflow import ANALYSIS_WORKFLOW
 from senaite.core.workflow import SAMPLE_WORKFLOW
 from senaite.referral import check_installed
 from senaite.referral.interfaces import IInboundSampleShipment
 from senaite.referral.interfaces import IOutboundSampleShipment
 from senaite.referral.remotelab import get_remote_connection
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import is_referral_partition
+from senaite.referral.utils import get_field_value
+from senaite.referral.utils import set_field_value
 from senaite.referral.workflow import change_workflow_state
 from senaite.referral.workflow import restore_referred_sample
 from senaite.referral.workflow import ship_sample
+from zope.interface import alsoProvides
 
 
 @check_installed(None)
@@ -54,6 +65,9 @@ def AfterTransitionEventHandler(sample, event): # noqa lowercase
 
     if event.transition.id == "invalidate_at_reference":
         after_invalidate_at_reference(sample)
+
+    if event.transition.id == "reject_at_reference":
+        after_reject_at_reference(sample)
 
     if event.transition.id == "recall_from_shipment":
         restore_referred_sample(sample)
@@ -158,3 +172,103 @@ def after_invalidate_at_reference(sample):
         change_workflow_state(analysis, ANALYSIS_WORKFLOW,
                               state_id="referred",
                               action="refer")
+
+    if is_referral_partition(sample):
+        synchronize_selective_retest(sample, retest)
+
+
+def after_reject_at_reference(sample):
+    """Reject only the canonical analyses delegated by this aliquot."""
+    if not is_referral_partition(sample):
+        return
+
+    for technical in sample.getAnalyses(full_objects=True):
+        source_uid = get_field_value(
+            technical, "ReferralSourceAnalysisUID", ""
+        )
+        canonical = api.get_object(source_uid, default=None)
+        if not canonical:
+            continue
+        if isTransitionAllowed(canonical, "reject"):
+            doActionFor(canonical, "reject")
+        else:
+            set_workflow_state(
+                canonical,
+                ANALYSIS_WORKFLOW,
+                "rejected",
+                action="reject",
+            )
+            alsoProvides(canonical, IRejected)
+
+
+def synchronize_selective_retest(invalidated, retest):
+    """Correlate a remote sample retest with canonical analysis retests."""
+    laboratory = get_partition_laboratory(invalidated)
+    set_field_value(retest, "ReferralPartition", True)
+    set_field_value(
+        retest, "ReferralLaboratory", api.get_uid(laboratory)
+    )
+    retest.setOutboundShipment(None)
+    if hasattr(retest, "setInternalUse"):
+        retest.setInternalUse(True)
+    if hasattr(retest, "setInvoiceExclude"):
+        retest.setInvoiceExclude(True)
+
+    new_by_keyword = {}
+    for analysis in retest.getAnalyses(full_objects=True):
+        new_by_keyword.setdefault(analysis.getKeyword(), []).append(analysis)
+
+    for technical in invalidated.getAnalyses(full_objects=True):
+        source_uid = get_field_value(
+            technical, "ReferralSourceAnalysisUID", ""
+        )
+        canonical = api.get_object(source_uid, default=None)
+        if not canonical:
+            continue
+
+        canonical_retest = canonical.getRetest()
+        if not canonical_retest:
+            canonical_retest = create_analysis_retest(canonical)
+            set_workflow_state(
+                canonical,
+                ANALYSIS_WORKFLOW,
+                "retracted",
+                action="retract",
+            )
+            alsoProvides(canonical, IRetracted)
+
+        candidates = new_by_keyword.get(technical.getKeyword(), [])
+        if not candidates:
+            continue
+        new_technical = candidates.pop(0)
+        delegation_id = get_field_value(
+            technical, "ReferralDelegationID", ""
+        )
+        set_field_value(
+            canonical_retest, "ReferralDelegationID", delegation_id
+        )
+        set_field_value(
+            canonical_retest,
+            "ReferralTechnicalAnalysisUID",
+            api.get_uid(new_technical),
+        )
+        set_field_value(
+            new_technical, "ReferralDelegationID", delegation_id
+        )
+        set_field_value(
+            new_technical,
+            "ReferralSourceAnalysisUID",
+            api.get_uid(canonical_retest),
+        )
+        canonical_retest.reindexObject()
+        new_technical.reindexObject()
+
+    # The physical aliquot is already at the reference lab, so this technical
+    # retest can receive results without creating another shipment.
+    set_workflow_state(
+        retest,
+        SAMPLE_WORKFLOW,
+        "received_at_reference",
+        action="receive_at_reference",
+    )
+    retest.reindexObject()

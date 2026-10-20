@@ -29,6 +29,11 @@ from senaite.referral.api import get_object_by_remote_uid
 from senaite.referral.api import link_remote_resource
 from senaite.referral.api import unlink_remote_resource
 from senaite.referral.remote.resource import RemoteResource
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import get_primary_sample
+from senaite.referral.selective import is_referral_partition
+from senaite.referral.utils import get_field_value
+from senaite.referral.utils import set_field_value
 from senaite.referral.utils import get_create_reference_analyses
 from senaite.referral.utils import get_services_mapping
 from zope.interface import alsoProvides
@@ -65,6 +70,9 @@ class OutboundSampleConsumer(object):
         # Find the counterpart sample in current instance
         sample_resource = RemoteResource(data.get("sample"))
         sample = self.get_sample(sample_resource)
+
+        if sample_resource.get("selective_referral", default=False):
+            self.validate_selective_sample(sample)
 
         # If the sample is invalidated, update the retest instead
         while self.is_invalidated(sample):
@@ -120,13 +128,16 @@ class OutboundSampleConsumer(object):
             # link the remote resource to this analysis
             link_remote_resource(analysis, resource)
 
-            # can the analysis be updated
-            if not self.can_update(analysis):
-                continue
-
-            # update the analysis
             try:
-                self.update_analysis(analysis, record)
+                if self.can_update(analysis):
+                    self.update_analysis(analysis, record)
+
+                # Keep the transport analysis in sync for operational audit,
+                # while the canonical result remains on the primary sample.
+                technical = self.find_transport_analysis(sample, resource)
+                if technical and technical != analysis:
+                    if self.can_update(technical):
+                        self.update_analysis(technical, record)
             except Exception as e:
                 raise APIError(500, "{}: {}".format(
                     type(e).__name__, str(e)))
@@ -187,6 +198,15 @@ class OutboundSampleConsumer(object):
         if sample:
             return sample
 
+        partition_uid = resource.get("origin_partition_uid", default=None)
+        if partition_uid:
+            sample = api.get_object(partition_uid, default=None)
+            if not is_referral_partition(sample):
+                raise ValueError(
+                    "Referral partition not found: {}".format(partition_uid)
+                )
+            return sample
+
         # search by sample id
         sample_id = resource.get("referring_id")
         if not sample_id:
@@ -218,6 +238,13 @@ class OutboundSampleConsumer(object):
         if analysis:
             return analysis
 
+        source_uid = resource.get("source_analysis_uid", default=None)
+        delegation_id = resource.get("delegation_id", default=None)
+        if source_uid or delegation_id:
+            return self.find_canonical_analysis(
+                sample, source_uid, delegation_id, resource
+            )
+
         # do we have to create a retest?
         retest_of = resource.get("retest_of", default=None)
         retest_of = get_object_by_remote_uid(retest_of, default=None)
@@ -245,6 +272,73 @@ class OutboundSampleConsumer(object):
 
         # return the newest
         return analyses[-1] if analyses else None
+
+    def find_canonical_analysis(self, sample, source_uid, delegation_id,
+                                resource):
+        """Resolve and validate a canonical origin-side analysis."""
+        if not source_uid or not delegation_id:
+            raise ValueError("Incomplete selective referral correlation")
+
+        canonical = api.get_object(source_uid, default=None)
+        if not canonical:
+            raise ValueError(
+                "Source analysis not found: {}".format(source_uid)
+            )
+
+        configured_id = get_field_value(
+            canonical, "ReferralDelegationID", ""
+        )
+        if configured_id != delegation_id:
+            raise ValueError(
+                "Delegation identifier does not match source analysis"
+            )
+
+        primary = get_primary_sample(sample)
+        if api.get_uid(canonical.getRequest()) != api.get_uid(primary):
+            raise ValueError(
+                "Source analysis does not belong to the referral's primary "
+                "sample"
+            )
+
+        if resource.get("is_retest", default=False):
+            retest = canonical.getRetest()
+            if not retest:
+                retest = create_retest(canonical)
+                changeWorkflowState(
+                    canonical,
+                    ANALYSIS_WORKFLOW,
+                    "retracted",
+                    action="retract",
+                )
+            set_field_value(
+                retest, "ReferralDelegationID", delegation_id
+            )
+            retest.reindexObject()
+            return retest
+
+        return canonical
+
+    def find_transport_analysis(self, sample, resource):
+        """Return the correlated technical analysis from the aliquot."""
+        delegation_id = resource.get("delegation_id", default=None)
+        if not delegation_id:
+            return None
+        for analysis in sample.getAnalyses(full_objects=True):
+            if get_field_value(
+                    analysis, "ReferralDelegationID", "") == delegation_id:
+                return analysis
+        return None
+
+    def validate_selective_sample(self, sample):
+        """Ensure results come from the configured destination laboratory."""
+        if not is_referral_partition(sample):
+            raise ValueError("Selective result target is not a referral aliquot")
+        laboratory = get_partition_laboratory(sample)
+        remote_code = self.data.get("lab_code")
+        if not laboratory or laboratory.getCode() != remote_code:
+            raise ValueError(
+                "Result sender does not match the referral destination"
+            )
 
     def update_analysis(self, analysis, record):
         if not analysis:
