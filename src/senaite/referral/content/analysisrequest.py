@@ -20,10 +20,14 @@
 
 from archetypes.schemaextender.interfaces import IBrowserLayerAwareExtender
 from archetypes.schemaextender.interfaces import ISchemaExtender
+from Products.Archetypes.Widget import BooleanWidget
+from Products.Archetypes.Widget import StringWidget
 from Products.CMFCore.permissions import View
 from senaite.referral import ISenaiteReferralLayer
 from senaite.referral import messageFactory as _
 from senaite.referral.catalog import SHIPMENT_CATALOG
+from senaite.referral.fields import ExtBooleanField
+from senaite.referral.fields import ExtStringField
 from senaite.referral.fields import ExtUIDReferenceField
 from zope.component import adapter
 from zope.interface import implementer
@@ -66,6 +70,58 @@ class AnalysisRequestSchemaExtender(object):
                     sort_order="ascending"
                 ),
             )
+        ),
+
+        ExtBooleanField(
+            "ReferralPartition",
+            default=False,
+            required=False,
+            widget=BooleanWidget(
+                visible={
+                    "view": "invisible",
+                    "edit": "invisible",
+                },
+            ),
+        ),
+
+        ExtUIDReferenceField(
+            "ReferralLaboratory",
+            allowed_types=("ExternalLaboratory",),
+            required=False,
+            widget=ReferenceWidget(
+                label=_("Referral laboratory"),
+                visible={
+                    "view": "invisible",
+                    "edit": "invisible",
+                },
+            ),
+        ),
+
+        ExtStringField(
+            "ReferralOriginLabCode",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
+
+        ExtStringField(
+            "ReferralPrimaryUID",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
+
+        ExtStringField(
+            "ReferralPartitionUID",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
         ),
     ]
 

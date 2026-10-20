@@ -4,6 +4,12 @@
 
   <include package="archetypes.schemaextender" />
 
+  <!-- Extend Analysis Service Schema -->
+  <adapter
+      name="senaite.referral.analysisservice.schemaextender"
+      factory=".analysisservice.AnalysisServiceSchemaExtender"
+      provides="archetypes.schemaextender.interfaces.ISchemaExtender" />
+
   <!-- Extend AnalysisRequest Schema -->
   <adapter
       name="senaite.referral.analysisrequest.schemaextender"

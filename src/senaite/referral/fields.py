@@ -20,6 +20,7 @@
 
 import six
 from archetypes.schemaextender.interfaces import IExtensionField
+from Products.Archetypes.Field import BooleanField
 from Products.Archetypes.Field import StringField
 from Products.Archetypes.Storage.annotation import AnnotationStorage
 from senaite.core.browser.fields.records import RecordsField
@@ -100,4 +101,9 @@ class ExtRecordsField(ExtensionField, RecordsField):
 
 class ExtStringField(ExtensionField, StringField):
     """Field Extender of StringField
+    """
+
+
+class ExtBooleanField(ExtensionField, BooleanField):
+    """Field Extender of BooleanField
     """

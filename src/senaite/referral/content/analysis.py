@@ -20,6 +20,7 @@
 
 from archetypes.schemaextender.interfaces import IBrowserLayerAwareExtender
 from archetypes.schemaextender.interfaces import ISchemaExtender
+from Products.Archetypes.Widget import StringWidget
 from senaite.referral import ISenaiteReferralLayer
 from senaite.referral.fields import ExtRecordsField
 from senaite.referral.fields import ExtStringField
@@ -55,7 +56,39 @@ class AnalysisSchemaExtender(object):
             "ReferenceMethod",
             default="",
             required=False,
-        )
+        ),
+        ExtStringField(
+            "ReferralDelegationID",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
+        ExtStringField(
+            "ReferralSourceAnalysisUID",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
+        ExtStringField(
+            "ReferralTechnicalAnalysisUID",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
+        ExtStringField(
+            "ReferralOriginLabCode",
+            default="",
+            required=False,
+            widget=StringWidget(
+                visible={"view": "invisible", "edit": "invisible"},
+            ),
+        ),
     ]
 
     def __init__(self, context):
