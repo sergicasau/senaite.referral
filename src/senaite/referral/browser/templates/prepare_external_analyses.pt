@@ -1,0 +1,67 @@
+<html xmlns="http://www.w3.org/1999/xhtml"
+      xmlns:tal="http://xml.zope.org/namespaces/tal"
+      xmlns:metal="http://xml.zope.org/namespaces/metal"
+      xmlns:i18n="http://xml.zope.org/namespaces/i18n"
+      metal:use-macro="here/main_template/macros/master"
+      i18n:domain="senaite.referral">
+  <body>
+    <metal:title fill-slot="content-title">
+      <h1 i18n:translate="">Prepare external analyses</h1>
+    </metal:title>
+
+    <metal:core fill-slot="content-core">
+      <p i18n:translate="">
+        The following analyses will be copied to internal-use referral
+        aliquots. The original analyses remain on this sample and receive the
+        final results.
+      </p>
+
+      <form method="POST">
+        <input type="hidden" name="submitted" value="1" />
+        <input tal:replace="structure context/@@authenticator/authenticator" />
+
+        <tal:groups tal:define="groups python:view.get_groups()">
+          <div class="alert alert-warning" tal:condition="not:groups"
+               i18n:translate="">
+            No unprepared external analyses were found.
+          </div>
+
+          <table class="table table-bordered" tal:condition="groups">
+            <thead>
+              <tr>
+                <th i18n:translate="">Destination laboratory</th>
+                <th i18n:translate="">Analyses</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr tal:repeat="group groups">
+                <td>
+                  <span tal:content="group/laboratory" />
+                  (<span tal:content="group/code" />)
+                </td>
+                <td>
+                  <ul>
+                    <li tal:repeat="analysis group/analyses">
+                      <span tal:content="analysis/title" />
+                      (<span tal:content="analysis/keyword" />)
+                    </li>
+                  </ul>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+
+          <button class="btn btn-primary"
+                  type="submit"
+                  name="button_prepare"
+                  tal:condition="groups"
+                  i18n:translate="">Prepare aliquots</button>
+          <button class="btn btn-default"
+                  type="submit"
+                  name="button_cancel"
+                  i18n:translate="">Cancel</button>
+        </tal:groups>
+      </form>
+    </metal:core>
+  </body>
+</html>

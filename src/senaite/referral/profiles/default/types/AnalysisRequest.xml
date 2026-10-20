@@ -1,0 +1,20 @@
+<?xml version="1.0"?>
+<object name="AnalysisRequest"
+        meta_type="Factory-based Type Information with dynamic views"
+        xmlns:i18n="http://xml.zope.org/namespaces/i18n"
+        i18n:domain="senaite.referral"
+        purge="False">
+
+  <action title="Prepare external analyses"
+          action_id="prepare_external_analyses"
+          category="object"
+          condition_expr="python:context.isRootAncestor() and context.portal_workflow.getInfoFor(context, 'review_state') == 'sample_received'"
+          icon_expr=""
+          link_target=""
+          url_expr="string:${object_url}/prepare_external_analyses"
+          i18n:attributes="title"
+          visible="True">
+    <permission value="senaite.core: Manage Analysis Requests" />
+  </action>
+
+</object>

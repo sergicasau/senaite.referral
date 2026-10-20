@@ -7,6 +7,10 @@ from collections import OrderedDict
 
 from bika.lims import api
 from bika.lims.interfaces import IAnalysisRequest
+from bika.lims.utils import changeWorkflowState
+from bika.lims.utils.analysis import create_analysis
+from bika.lims.utils.analysisrequest import create_partition
+from senaite.core.workflow import ANALYSIS_WORKFLOW
 from senaite.referral.interfaces import IExternalLaboratory
 from senaite.referral.utils import get_field_value
 from senaite.referral.utils import get_lab_code
@@ -162,3 +166,122 @@ def set_correlation(canonical, technical, laboratory):
     canonical.reindexObject()
     technical.reindexObject()
     return delegation_id
+
+
+def get_available_partition(primary, laboratory):
+    """Return an unshipped referral partition for the destination lab."""
+    laboratory_uid = api.get_uid(laboratory)
+    for partition in primary.getDescendants(all_descendants=False):
+        if not is_referral_partition(partition):
+            continue
+        if api.get_uid(get_partition_laboratory(partition)) != laboratory_uid:
+            continue
+        if partition.getOutboundShipment():
+            continue
+        if api.get_review_status(partition) != "sample_received":
+            continue
+        return partition
+    return None
+
+
+def mark_referral_partition(partition, primary, laboratory):
+    """Mark an aliquot as an internal, non-invoiceable transport sample."""
+    set_field_value(partition, "ReferralPartition", True)
+    set_field_value(partition, "ReferralLaboratory", api.get_uid(laboratory))
+    set_field_value(partition, "ReferralOriginLabCode", get_lab_code() or "")
+    set_field_value(partition, "ReferralPrimaryUID", api.get_uid(primary))
+    if hasattr(partition, "setInternalUse"):
+        partition.setInternalUse(True)
+    if hasattr(partition, "setInvoiceExclude"):
+        partition.setInvoiceExclude(True)
+    partition.reindexObject()
+
+
+def _create_technical_analysis(partition, canonical):
+    """Add a technical analysis to an existing received partition."""
+    technical = create_analysis(partition, canonical)
+    if api.get_review_status(technical) != "unassigned":
+        changeWorkflowState(
+            technical,
+            ANALYSIS_WORKFLOW,
+            "unassigned",
+            action="initialize",
+        )
+    technical.reindexObject()
+    return technical
+
+
+def _match_technical_analyses(partition, canonical_analyses):
+    """Match copied analyses back to their canonical source by Keyword."""
+    by_keyword = OrderedDict()
+    for technical in partition.getAnalyses(full_objects=True):
+        by_keyword.setdefault(technical.getKeyword(), []).append(technical)
+
+    matches = []
+    for canonical in canonical_analyses:
+        candidates = by_keyword.get(canonical.getKeyword(), [])
+        candidates = filter(
+            lambda analysis: not get_field_value(
+                analysis, "ReferralSourceAnalysisUID", ""
+            ),
+            candidates,
+        )
+        candidates = list(candidates)
+        if not candidates:
+            raise ValueError(
+                "No technical analysis was created for '{}'".format(
+                    canonical.getKeyword()
+                )
+            )
+        matches.append((canonical, candidates[0]))
+    return matches
+
+
+def prepare_external_analyses(sample, request=None):
+    """Create one technical referral aliquot per destination laboratory.
+
+    Canonical analyses stay on the primary sample. The returned partitions
+    contain copies used only for transport and remote workflow tracking.
+    Calling this function again is safe: already correlated analyses are
+    ignored and an existing unshipped partition is reused.
+    """
+    sample = api.get_object(sample)
+    if not IAnalysisRequest.providedBy(sample):
+        raise ValueError("Only samples can be prepared for referral")
+    if not sample.isRootAncestor():
+        raise ValueError("Prepare referrals from the primary sample")
+    if api.get_review_status(sample) != "sample_received":
+        raise ValueError("The primary sample must be received first")
+
+    request = request or api.get_request()
+    groups = group_external_analyses(sample)
+    prepared = []
+    for group in groups.values():
+        laboratory = group["laboratory"]
+        canonical_analyses = group["analyses"]
+        partition = get_available_partition(sample, laboratory)
+
+        if partition:
+            technical_analyses = [
+                _create_technical_analysis(partition, analysis)
+                for analysis in canonical_analyses
+            ]
+            matches = zip(canonical_analyses, technical_analyses)
+        else:
+            partition = create_partition(
+                sample,
+                request,
+                canonical_analyses,
+                internal_use=True,
+            )
+            mark_referral_partition(partition, sample, laboratory)
+            matches = _match_technical_analyses(
+                partition, canonical_analyses
+            )
+
+        for canonical, technical in matches:
+            set_correlation(canonical, technical, laboratory)
+
+        prepared.append(partition)
+
+    return prepared

@@ -19,15 +19,15 @@
 # Some rights reserved, see README and LICENSE.
 
 import collections
-from bika.lims import AddAnalysisRequest
 from bika.lims import api
 from bika.lims import bikaMessageFactory as _c
 from bika.lims import PRIORITIES
-from bika.lims.api.security import check_permission
 from senaite.core.catalog import SAMPLE_CATALOG
 from senaite.referral import messageFactory as _
 from senaite.app.listing import ListingView
 from senaite.referral.utils import get_image_url
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import is_referral_partition
 
 
 class AddSamplesListingView(ListingView):
@@ -53,7 +53,7 @@ class AddSamplesListingView(ListingView):
             "assigned_state": "unassigned",
             "sort_on": "created",
             "sort_order": "descending",
-            "isRootAncestor": True
+            "isRootAncestor": False
         }
 
         self.columns = collections.OrderedDict((
@@ -113,18 +113,14 @@ class AddSamplesListingView(ListingView):
         """
         super(AddSamplesListingView, self).update()
 
-        samples_folder = api.get_portal().samples
-        if check_permission(AddAnalysisRequest, samples_folder):
-            uid = api.get_uid(self.context)
-            url = api.get_url(samples_folder)
-            url = "{}/ar_add?ar_count=1&OutboundShipment={}".format(url, uid)
-
-            self.context_actions.update({
-                _("Add new sample"): {
-                    "url": url,
-                    "icon": "++resource++bika.lims.images/add.png"
-                }
-            })
+    def isItemAllowed(self, obj):
+        """Only list prepared aliquots for this shipment's laboratory."""
+        sample = api.get_object(obj)
+        if not is_referral_partition(sample):
+            return False
+        sample_lab = get_partition_laboratory(sample)
+        shipment_lab = self.context.getReferenceLaboratory()
+        return api.get_uid(sample_lab) == api.get_uid(shipment_lab)
 
     def folderitem(self, obj, item, index):
         """Applies new properties to item that is currently being rendered as a

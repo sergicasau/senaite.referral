@@ -24,6 +24,8 @@ from senaite.referral import messageFactory as _
 from senaite.referral.browser import BaseView
 from senaite.referral.catalog import SHIPMENT_CATALOG
 from senaite.referral.interfaces import IOutboundSampleShipment
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import is_referral_partition
 from senaite.referral.workflow import ship_sample
 
 from bika.lims import api
@@ -94,7 +96,28 @@ class ShipSamplesView(BaseView):
             "sort_on": "sortable_title",
             "sort_order": "ascending",
         }
-        return api.search(query, SHIPMENT_CATALOG)
+        shipments = api.search(query, SHIPMENT_CATALOG)
+        samples = list(self.get_samples_data())
+        if not samples:
+            return shipments
+
+        laboratories = set()
+        for sample in samples:
+            obj = sample["obj"]
+            if not is_referral_partition(obj):
+                continue
+            laboratory = get_partition_laboratory(obj)
+            laboratories.add(api.get_uid(laboratory))
+
+        if len(laboratories) != 1:
+            return []
+        laboratory_uid = list(laboratories)[0]
+        return filter(
+            lambda brain: api.get_uid(
+                api.get_object(brain).getReferenceLaboratory()
+            ) == laboratory_uid,
+            shipments,
+        )
 
     @view.memoize
     def get_samples_data(self):
@@ -103,7 +126,7 @@ class ShipSamplesView(BaseView):
         uids = self.get_uids_from_request()
         query = {"portal_type": "AnalysisRequest", "UID": uids}
         brains = api.search(query, CATALOG_ANALYSIS_REQUEST_LISTING)
-        return map(self.get_sample_data, brains)
+        return list(map(self.get_sample_data, brains))
 
     def get_sample_data(self, sample):
         """Returns a dict representation of the sample for easy handling

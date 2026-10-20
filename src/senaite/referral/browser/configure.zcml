@@ -44,6 +44,14 @@
       permission="senaite.core.permissions.ManageAnalysisRequests"
       layer="senaite.referral.interfaces.ISenaiteReferralLayer" />
 
+  <!-- Prepare one technical aliquot per external laboratory -->
+  <browser:page
+      for="bika.lims.interfaces.IAnalysisRequest"
+      name="prepare_external_analyses"
+      class=".prepare_external_analyses.PrepareExternalAnalysesView"
+      permission="senaite.core.permissions.ManageAnalysisRequests"
+      layer="senaite.referral.interfaces.ISenaiteReferralLayer" />
+
   <!-- Retry notification -->
   <browser:page
       for="*"

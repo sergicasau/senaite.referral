@@ -29,6 +29,8 @@ from senaite.core.workflow import ANALYSIS_WORKFLOW
 from senaite.core.workflow import SAMPLE_WORKFLOW
 from senaite.referral import logger
 from senaite.referral.interfaces import IOutboundSampleShipment
+from senaite.referral.selective import get_partition_laboratory
+from senaite.referral.selective import is_referral_partition
 from senaite.referral.utils import get_chunk_size_for
 from zope.event import notify
 from zope.lifecycleevent import modified
@@ -84,6 +86,18 @@ def ship_sample(sample, shipment):
     if not IOutboundSampleShipment.providedBy(shipment):
         portal_type = api.get_portal_type(shipment)
         raise ValueError("Type not supported: {}".format(portal_type))
+
+    if not is_referral_partition(sample):
+        raise ValueError(
+            "Only prepared referral aliquots can be added to a shipment"
+        )
+
+    destination = get_partition_laboratory(sample)
+    shipment_destination = shipment.getReferenceLaboratory()
+    if api.get_uid(destination) != api.get_uid(shipment_destination):
+        raise ValueError(
+            "Referral aliquot and shipment have different destinations"
+        )
 
     # Add the sample to the shipment
     shipment.addSample(sample)
