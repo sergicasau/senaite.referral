@@ -177,15 +177,19 @@
           <h2 i18n:translate="">Samples</h2>
           <table class="table table-sm table-condensed noborder">
             <colgroup>
-              <col style="width:15%"/>
-              <col style="width:15%"/>
+              <col style="width:12%"/>
+              <col style="width:12%"/>
+              <col style="width:12%"/>
               <col style="width:20%"/>
               <col style="width:20%"/>
-              <col style="width:30%"/>
+              <col style="width:24%"/>
             </colgroup>
             <tr>
-              <th i18n:translate="shipment_manifest_column_sample_id">
-                Sample ID
+              <th i18n:translate="shipment_manifest_column_primary_sample_id">
+                Primary sample ID
+              </th>
+              <th i18n:translate="shipment_manifest_column_partition_id">
+                Aliquot ID
               </th>
               <th i18n:translate="shipment_manifest_column_client_sample_id">
                 Client SID
@@ -196,12 +200,19 @@
               <th i18n:translate="shipment_manifest_column_sample_type">
                 Sample Type
               </th>
+              <th i18n:translate="shipment_manifest_column_analyses">
+                Analyses
+              </th>
             </tr>
-            <tr tal:repeat="sample python:view.get_samples()">
+            <tr tal:repeat="sample python:view.get_samples()"
+                tal:define="primary python:sample.getParentAnalysisRequest() or sample">
+              <td class="align-middle text-left" tal:content="python:primary.getId()"/>
               <td class="align-middle text-left" tal:content="python:sample.getId()"/>
-              <td class="align-middle text-left" tal:content="python:sample.getClientSampleID()"/>
+              <td class="align-middle text-left" tal:content="python:primary.getClientSampleID()"/>
               <td class="align-middle text-left" tal:content="python:view.long_date(sample.getDateSampled())"/>
               <td class="align-middle text-left" tal:content="python:sample.getSampleType().Title()"/>
+              <td class="align-middle text-left"
+                  tal:content="python:', '.join([analysis.getKeyword() for analysis in sample.getAnalyses(full_objects=True)])"/>
             </tr>
           </table>
         </div>

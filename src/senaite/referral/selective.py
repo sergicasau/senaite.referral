@@ -57,6 +57,11 @@ def validate_external_service(service):
         )
 
     executing_code = get_executing_laboratory_code(service)
+    origin_code = get_lab_code()
+    if not origin_code:
+        raise ValueError(
+            "The current SENAITE instance has no referral laboratory code"
+        )
     if not executing_code:
         raise ValueError(
             "External service '{}' has no executing laboratory code".format(
@@ -69,6 +74,11 @@ def validate_external_service(service):
             "reference laboratory code '{}'".format(
                 executing_code, keyword, laboratory.getCode()
             )
+        )
+    if executing_code == origin_code:
+        raise ValueError(
+            "External service '{}' points to the current laboratory"
+            .format(keyword)
         )
     return laboratory
 
@@ -83,7 +93,17 @@ def validate_local_service(service):
 
     code = get_executing_laboratory_code(service)
     current_code = get_lab_code()
-    if code and current_code and code != current_code:
+    if not current_code:
+        raise ValueError(
+            "The current SENAITE instance has no referral laboratory code"
+        )
+    if not code:
+        raise ValueError(
+            "Internal service '{}' has no executing laboratory code".format(
+                service.getKeyword()
+            )
+        )
+    if code != current_code:
         raise ValueError(
             "Executing laboratory code '{}' for service '{}' does not match "
             "this instance code '{}'".format(
@@ -147,6 +167,24 @@ def group_external_analyses(sample):
         })
         group["analyses"].append(analysis)
     return groups
+
+
+def validate_external_analysis_states(sample):
+    """Prevent delegating analyses that are already assigned locally."""
+    analyses = sample.getAnalyses(
+        full_objects=True,
+        review_state="assigned",
+    )
+    assigned = []
+    for analysis in analyses:
+        service = analysis.getAnalysisService()
+        if get_referral_mode(service) == MODE_EXTERNAL:
+            assigned.append(analysis.getKeyword())
+    if assigned:
+        raise ValueError(
+            "External analyses must be unassigned before preparation: {}"
+            .format(", ".join(assigned))
+        )
 
 
 def set_correlation(canonical, technical, laboratory):
@@ -257,6 +295,7 @@ def prepare_external_analyses(sample, request=None):
         raise ValueError("The primary sample must be received first")
 
     request = request or api.get_request()
+    validate_external_analysis_states(sample)
     groups = group_external_analyses(sample)
     prepared = []
     for group in groups.values():

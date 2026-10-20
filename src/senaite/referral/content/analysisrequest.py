@@ -78,8 +78,10 @@ class AnalysisRequestSchemaExtender(object):
             required=False,
             widget=BooleanWidget(
                 visible={
+                    "add": "invisible",
                     "view": "invisible",
                     "edit": "invisible",
+                    "secondary": "invisible",
                 },
             ),
         ),
@@ -91,8 +93,10 @@ class AnalysisRequestSchemaExtender(object):
             widget=ReferenceWidget(
                 label=_("Referral laboratory"),
                 visible={
+                    "add": "invisible",
                     "view": "invisible",
                     "edit": "invisible",
+                    "secondary": "invisible",
                 },
             ),
         ),
@@ -102,7 +106,12 @@ class AnalysisRequestSchemaExtender(object):
             default="",
             required=False,
             widget=StringWidget(
-                visible={"view": "invisible", "edit": "invisible"},
+                visible={
+                    "add": "invisible",
+                    "view": "invisible",
+                    "edit": "invisible",
+                    "secondary": "invisible",
+                },
             ),
         ),
 
@@ -111,7 +120,12 @@ class AnalysisRequestSchemaExtender(object):
             default="",
             required=False,
             widget=StringWidget(
-                visible={"view": "invisible", "edit": "invisible"},
+                visible={
+                    "add": "invisible",
+                    "view": "invisible",
+                    "edit": "invisible",
+                    "secondary": "invisible",
+                },
             ),
         ),
 
@@ -120,7 +134,12 @@ class AnalysisRequestSchemaExtender(object):
             default="",
             required=False,
             widget=StringWidget(
-                visible={"view": "invisible", "edit": "invisible"},
+                visible={
+                    "add": "invisible",
+                    "view": "invisible",
+                    "edit": "invisible",
+                    "secondary": "invisible",
+                },
             ),
         ),
     ]
