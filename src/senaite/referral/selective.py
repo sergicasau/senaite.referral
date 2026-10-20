@@ -129,7 +129,7 @@ def group_external_analyses(sample):
     groups = OrderedDict()
     analyses = sample.getAnalyses(
         full_objects=True,
-        review_state=["unassigned", "assigned"],
+        review_state="unassigned",
         sort_on="sortable_title",
         sort_order="ascending",
     )
@@ -153,6 +153,9 @@ def set_correlation(canonical, technical, laboratory):
     """Link canonical and transport analyses using a stable delegation id."""
     delegation_id = make_delegation_id(canonical, laboratory)
     set_field_value(canonical, "ReferralDelegationID", delegation_id)
+    set_field_value(
+        canonical, "ReferralOriginLabCode", get_lab_code() or ""
+    )
     set_field_value(
         canonical, "ReferralTechnicalAnalysisUID", api.get_uid(technical)
     )
