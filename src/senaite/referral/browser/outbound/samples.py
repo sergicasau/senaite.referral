@@ -42,8 +42,9 @@ class SamplesListingView(ListingView):
         self.show_search = False
 
         self.catalog = SAMPLE_CATALOG
+        self.sample_uids = self.get_sample_uids()
         self.contentFilter = {
-            "UID": context.getRawSamples(),
+            "UID": self.sample_uids,
             "sort_on": "sortable_title",
             "sort_order": "ascending"
         }
@@ -100,6 +101,22 @@ class SamplesListingView(ListingView):
             "columns": self.columns.keys(),
         }]
 
+    def get_sample_uids(self):
+        """Return shipped samples and their sample-level retests.
+
+        A retest is related to the original physical shipment, but must not
+        alter the shipment membership or its already generated manifest.
+        """
+        uids = []
+        for sample in self.context.getSamples():
+            while sample:
+                uid = api.get_uid(sample)
+                if uid in uids:
+                    break
+                uids.append(uid)
+                sample = sample.getRetest()
+        return uids
+
     def update(self):
         """Before template render hook
         """
@@ -126,7 +143,7 @@ class SamplesListingView(ListingView):
             return items
 
         # set the position attribute for each item
-        uids = self.context.getRawSamples()
+        uids = self.sample_uids
         for item in items:
             item["position"] = uids.index(item["uid"]) + 1
 

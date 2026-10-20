@@ -208,7 +208,14 @@ class RemoteLab(object):
             # Skip unsolicited analyses?
             if skip_unrequested:
                 inbound_sample = sample.getInboundSample()
-                query["getServiceUID"] = inbound_sample.getRawServices()
+                # Sample retests are not directly linked to the inbound
+                # wrapper. Reuse the original sample's wrapper so requested
+                # services can still be identified and notified.
+                invalidated = sample.getInvalidated()
+                if not inbound_sample and invalidated:
+                    inbound_sample = invalidated.getInboundSample()
+                if inbound_sample:
+                    query["getServiceUID"] = inbound_sample.getRawServices()
 
             analyses = []
             for analysis in sample.getAnalyses(**query):

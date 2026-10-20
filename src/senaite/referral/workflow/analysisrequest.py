@@ -92,6 +92,10 @@ def after_verify(sample):
     if not remote_lab:
         return
 
+    # Keep the sample catalog in sync even if the remote notification fails
+    # and the caller handles the exception without aborting the transaction.
+    sample.reindexObject()
+
     # Update the results for this sample in the remote lab
     remote_lab.update_analyses(sample)
 
