@@ -18,14 +18,21 @@
 # Copyright 2021-2022 by it's authors.
 # Some rights reserved, see README and LICENSE.
 
+import json
+
 from bika.lims import api
 from bika.lims.interfaces import IReceived
 from bika.lims.utils.analysisrequest import create_analysisrequest
 from bika.lims.utils.analysisrequest import receive_sample
 from bika.lims.workflow import doActionFor
-from senaite.referral.utils import get_sample_types_mapping
-from senaite.referral.utils import get_services_mapping
+from senaite.core.catalog import SETUP_CATALOG
+from senaite.referral.interfaces import IInboundSampleValues
+from senaite.referral.selective import validate_local_service
+from senaite.referral.utils import get_field_value
+from senaite.referral.utils import set_field_value
 from senaite.referral.workflow.analysisrequest import get_remote_lab
+from zope.annotation.interfaces import IAnnotations
+from zope.component import subscribers
 
 
 def after_receive_inbound_sample(inbound_sample):
@@ -83,20 +90,21 @@ def create_sample(inbound_sample):
     # Get the default contact for this shipment
     contact = shipment.getRawDefaultContact()
 
-    # Get baseline objects mappings
-    services = get_services_mapping()
-    sample_types = get_sample_types_mapping()
+    annotation = IAnnotations(inbound_sample)
+    original = annotation.get("__original__", "{}")
+    record = json.loads(original)
+    selective = bool(record.get("selective_referral", False))
 
     # Create the sample object
     sample_type = inbound_sample.getSampleType()
-    sample_type_uid = sample_types.get(sample_type)
-    if not sample_type_uid:
-        raise ValueError("No sample type found for '{}'".format(sample_type))
+    sample_type_uid = api.get_uid(get_sample_type_by_title(sample_type))
 
     # Resolve the service uids that match with the requested analyses
     keywords = inbound_sample.getAnalyses() or []
-    services_uids = map(lambda key: services.get(key), keywords)
-    services_uids = filter(api.is_uid, services_uids)
+    services = [get_service_by_keyword(key) for key in keywords]
+    if selective:
+        list(map(validate_local_service, services))
+    services_uids = list(map(api.get_uid, services))
 
     # Update the inbound sample with the service uids
     inbound_sample.setServices(services_uids)
@@ -109,12 +117,100 @@ def create_sample(inbound_sample):
         "SampleType": sample_type_uid,
         "Priority": inbound_sample.getPriority(),
         "InboundShipment": api.get_uid(shipment),
+        "ReferralOriginLabCode": record.get("origin_lab_code", ""),
+        "ReferralPrimaryUID": record.get("primary_uid", ""),
+        "ReferralPartitionUID": record.get("partition_uid", ""),
     }
+
+    # Let optional add-ons provide site-specific mandatory fields (e.g. the
+    # generic inter-laboratory Circuit in senaite.circuits).
+    for adapter in subscribers((inbound_sample,), IInboundSampleValues):
+        adapter.update(values, record)
 
     # Create the sample and assign the shipment
     request = api.get_request()
     sample = create_analysisrequest(client, request, values, services_uids)
 
+    if selective:
+        set_analysis_correlations(sample, record.get("analysis_records", []))
+
     # Associate this new Sample with the Inbound Sample
     inbound_sample.setSample(sample)
     return sample
+
+
+def get_service_by_keyword(keyword):
+    """Resolve one active Analysis Service by its globally unique Keyword."""
+    query = {
+        "portal_type": "AnalysisService",
+        "getKeyword": keyword,
+    }
+    brains = api.search(query, SETUP_CATALOG)
+    services = [api.get_object(brain) for brain in brains]
+    services = list(filter(api.is_active, services))
+    if not services:
+        raise ValueError(
+            "No active Analysis Service found for Keyword '{}'".format(
+                keyword
+            )
+        )
+    if len(services) > 1:
+        raise ValueError(
+            "More than one active Analysis Service uses Keyword '{}'".format(
+                keyword
+            )
+        )
+    return services[0]
+
+
+def get_sample_type_by_title(title):
+    """Resolve one active Sample Type by its stable title/code."""
+    query = {
+        "portal_type": "SampleType",
+        "title": title,
+    }
+    brains = api.search(query, SETUP_CATALOG)
+    sample_types = [api.get_object(brain) for brain in brains]
+    sample_types = list(filter(api.is_active, sample_types))
+    if not sample_types:
+        raise ValueError("No active Sample Type found for '{}'".format(title))
+    if len(sample_types) > 1:
+        raise ValueError(
+            "More than one active Sample Type uses title '{}'".format(title)
+        )
+    return sample_types[0]
+
+
+def set_analysis_correlations(sample, records):
+    """Copy origin-side correlation metadata to destination analyses."""
+    records_by_keyword = {}
+    for record in records:
+        records_by_keyword.setdefault(record.get("keyword"), []).append(record)
+
+    for analysis in sample.getAnalyses(full_objects=True):
+        candidates = records_by_keyword.get(analysis.getKeyword(), [])
+        if not candidates:
+            raise ValueError(
+                "Missing correlation record for delegated analysis '{}'"
+                .format(analysis.getKeyword())
+            )
+        record = candidates.pop(0)
+        delegation_id = record.get("delegation_id")
+        source_uid = record.get("source_analysis_uid")
+        if not delegation_id or not source_uid:
+            raise ValueError(
+                "Incomplete correlation record for delegated analysis '{}'"
+                .format(analysis.getKeyword())
+            )
+        set_field_value(
+            analysis, "ReferralDelegationID", delegation_id
+        )
+        set_field_value(
+            analysis, "ReferralSourceAnalysisUID", source_uid
+        )
+        set_field_value(
+            analysis,
+            "ReferralOriginLabCode",
+            get_field_value(sample, "ReferralOriginLabCode", ""),
+        )
+        analysis.reindexObject()

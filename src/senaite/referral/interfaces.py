@@ -112,3 +112,15 @@ class IRemoteContent(Interface):
     """Marker interface for objects that maintain a reference to corresponding
     referral content in a remote laboratory
     """
+
+
+class IInboundSampleValues(Interface):
+    """Subscriber contract for add-ons that supply inbound sample values."""
+
+    def update(values, record):
+        """Update the values used to create the destination sample.
+
+        ``values`` is mutable. ``record`` is the original selective-referral
+        payload for the inbound sample. Implementations should raise a
+        ``ValueError`` when a mandatory value cannot be resolved.
+        """

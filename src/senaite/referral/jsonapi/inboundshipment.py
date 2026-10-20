@@ -64,6 +64,28 @@ class InboundShipmentConsumer(object):
             sample_records = json.loads(sample_records)
         self.validate(sample_records, required=required_fields)
 
+        for record in sample_records:
+            if not record.get("selective_referral"):
+                continue
+            required = [
+                "origin_lab_code",
+                "primary_id",
+                "primary_uid",
+                "partition_id",
+                "partition_uid",
+                "analyses",
+                "analysis_records",
+            ]
+            self.validate(record, required=required)
+            self.validate(
+                record.get("analysis_records"),
+                required=[
+                    "keyword",
+                    "delegation_id",
+                    "source_analysis_uid",
+                ],
+            )
+
         # XXX translate sample info (e.g. SampleType) to UIDs
 
         dispatched = self.data.get("dispatched")
@@ -79,8 +101,9 @@ class InboundShipmentConsumer(object):
         shipment_id = self.data.get("shipment_id")
         shipment = self.get_inbound_shipment(shipment_id, lab)
         if shipment:
-            raise ValueError("Inbound shipment already exists: {}"
-                             .format(shipment_id))
+            # Remote notifications can be retried after a timeout. Treat an
+            # existing counterpart from the same laboratory as success.
+            return True
 
         # Create the Inbound Shipment and the Inbound Samples
         # TODO Performance - convert to queue task
@@ -149,7 +172,8 @@ class InboundShipmentConsumer(object):
             return
 
         if isinstance(record, (list, tuple)):
-            map(lambda rec: self.validate(rec, required=required), record)
+            for rec in record:
+                self.validate(rec, required=required)
             return
 
         for field in required:

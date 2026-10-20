@@ -39,6 +39,9 @@ from senaite.referral.utils import get_notify_retested
 from senaite.referral.utils import get_notify_unrequested
 from senaite.referral.utils import get_user_info
 from senaite.referral.utils import is_valid_url
+from senaite.referral.selective import get_primary_sample
+from senaite.referral.selective import is_referral_partition
+from senaite.referral.utils import get_field_value
 
 
 def get_remote_connection(laboratory):
@@ -169,14 +172,48 @@ class RemoteLab(object):
             date_sampled = sample.getDateSampled()
 
             state = ["registered", "unassigned", "assigned", "referred"]
-            analyses = sample.getAnalyses(full_objects=False, review_state=state)
-            return {
+            analyses = sample.getAnalyses(
+                full_objects=True,
+                review_state=state,
+                sort_on="sortable_title",
+                sort_order="ascending",
+            )
+            primary = get_primary_sample(sample)
+            selective = is_referral_partition(sample)
+            analysis_records = []
+            for analysis in analyses:
+                source_uid = get_field_value(
+                    analysis, "ReferralSourceAnalysisUID", ""
+                )
+                source = api.get_object(source_uid, default=None)
+                analysis_records.append({
+                    "keyword": analysis.getKeyword(),
+                    "delegation_id": get_field_value(
+                        analysis, "ReferralDelegationID", ""
+                    ),
+                    "source_analysis_uid": source_uid,
+                    "source_analysis_id": (
+                        api.get_id(source) if source else ""
+                    ),
+                    "source_transport_analysis_uid": api.get_uid(analysis),
+                })
+
+            record = {
                 "id": api.get_id(sample),
+                "uid": api.get_uid(sample),
                 "sample_type": api.get_title(sample_type),
                 "date_sampled": date_to_string(date_sampled),
                 "priority": sample.getPriority(),
-                "analyses": map(lambda an: an.getKeyword, analyses)
+                "analyses": [an.getKeyword() for an in analyses],
+                "analysis_records": analysis_records,
+                "selective_referral": selective,
+                "origin_lab_code": get_lab_code(),
+                "primary_id": api.get_id(primary),
+                "primary_uid": api.get_uid(primary),
+                "partition_id": api.get_id(sample),
+                "partition_uid": api.get_uid(sample),
             }
+            return record
 
         dispatched = shipment.getDispatchedDateTime()
         dispatched = date_to_string(dispatched, "%Y-%m-%d %H:%M:%S")
@@ -185,7 +222,7 @@ class RemoteLab(object):
             "consumer": "senaite.referral.inbound_shipment",
             "shipment_id": api.get_id(shipment),
             "dispatched": dispatched,
-            "samples": filter(None, samples),
+            "samples": list(filter(None, samples)),
         }
         self.notify(shipment, payload, timeout=timeout)
 
