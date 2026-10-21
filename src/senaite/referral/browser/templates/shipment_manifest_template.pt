@@ -204,11 +204,12 @@
                 Analyses
               </th>
             </tr>
-            <tr tal:repeat="sample python:view.get_samples()"
-                tal:define="primary python:sample.getParentAnalysisRequest() or sample">
-              <td class="align-middle text-left" tal:content="python:primary.getId()"/>
+            <tr tal:repeat="sample python:view.get_samples()">
+              <td class="align-middle text-left"
+                  tal:content="python:(sample.getParentAnalysisRequest() or sample).getId()"/>
               <td class="align-middle text-left" tal:content="python:sample.getId()"/>
-              <td class="align-middle text-left" tal:content="python:primary.getClientSampleID()"/>
+              <td class="align-middle text-left"
+                  tal:content="python:(sample.getParentAnalysisRequest() or sample).getClientSampleID()"/>
               <td class="align-middle text-left" tal:content="python:view.long_date(sample.getDateSampled())"/>
               <td class="align-middle text-left" tal:content="python:sample.getSampleType().Title()"/>
               <td class="align-middle text-left"
