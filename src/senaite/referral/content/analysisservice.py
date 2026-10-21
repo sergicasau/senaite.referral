@@ -53,10 +53,11 @@ class AnalysisServiceSchemaExtender(object):
             widget=StringWidget(
                 label=_("Executing laboratory code"),
                 description=_(
-                    "Stable code of the laboratory that performs this "
-                    "service. It must be identical in every instance."
+                    "Enter the stable code of the laboratory that performs "
+                    "this service (for example: BCN, LIS, MAD or SVQ). It "
+                    "must be identical in every SENAITE instance."
                 ),
-                render_own_label=True,
+                render_own_label=False,
             ),
         ),
         ExtUIDReferenceField(

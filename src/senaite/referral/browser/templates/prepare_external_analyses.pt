@@ -54,11 +54,13 @@
           <button class="btn btn-primary"
                   type="submit"
                   name="button_prepare"
+                  value="1"
                   tal:condition="groups"
                   i18n:translate="">Prepare aliquots</button>
           <button class="btn btn-default"
                   type="submit"
                   name="button_cancel"
+                  value="1"
                   i18n:translate="">Cancel</button>
         </tal:groups>
       </form>
