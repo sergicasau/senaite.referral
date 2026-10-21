@@ -252,32 +252,6 @@ def _create_technical_analysis(partition, canonical):
     return technical
 
 
-def _match_technical_analyses(partition, canonical_analyses):
-    """Match copied analyses back to their canonical source by Keyword."""
-    by_keyword = OrderedDict()
-    for technical in partition.getAnalyses(full_objects=True):
-        by_keyword.setdefault(technical.getKeyword(), []).append(technical)
-
-    matches = []
-    for canonical in canonical_analyses:
-        candidates = by_keyword.get(canonical.getKeyword(), [])
-        candidates = filter(
-            lambda analysis: not get_field_value(
-                analysis, "ReferralSourceAnalysisUID", ""
-            ),
-            candidates,
-        )
-        candidates = list(candidates)
-        if not candidates:
-            raise ValueError(
-                "No technical analysis was created for '{}'".format(
-                    canonical.getKeyword()
-                )
-            )
-        matches.append((canonical, candidates[0]))
-    return matches
-
-
 def prepare_external_analyses(sample, request=None):
     """Create one technical referral aliquot per destination laboratory.
 
@@ -303,23 +277,20 @@ def prepare_external_analyses(sample, request=None):
         canonical_analyses = group["analyses"]
         partition = get_available_partition(sample, laboratory)
 
-        if partition:
-            technical_analyses = [
-                _create_technical_analysis(partition, analysis)
-                for analysis in canonical_analyses
-            ]
-            matches = zip(canonical_analyses, technical_analyses)
-        else:
+        if not partition:
             partition = create_partition(
                 sample,
                 request,
-                canonical_analyses,
+                [],
                 internal_use=True,
             )
             mark_referral_partition(partition, sample, laboratory)
-            matches = _match_technical_analyses(
-                partition, canonical_analyses
-            )
+
+        technical_analyses = [
+            _create_technical_analysis(partition, analysis)
+            for analysis in canonical_analyses
+        ]
+        matches = zip(canonical_analyses, technical_analyses)
 
         for canonical, technical in matches:
             set_correlation(canonical, technical, laboratory)
