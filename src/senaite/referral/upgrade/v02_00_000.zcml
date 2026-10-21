@@ -3,14 +3,6 @@
     xmlns:genericsetup="http://namespaces.zope.org/genericsetup">
 
   <genericsetup:upgradeStep
-      title="Setup selective analysis referrals"
-      description="Adds the sample action used to prepare referral aliquots"
-      source="2010"
-      destination="2011"
-      handler=".v02_00_000.setup_selective_analysis_referrals"
-      profile="senaite.referral:default"/>
-
-  <genericsetup:upgradeStep
       title="Display Shipments and External Labs in the navbar"
       description="
         This upgrade step makes the product compatible with senaite.core#2835

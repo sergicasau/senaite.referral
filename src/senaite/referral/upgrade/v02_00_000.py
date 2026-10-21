@@ -60,15 +60,6 @@ def upgrade(tool):
     return True
 
 
-def setup_selective_analysis_referrals(tool):
-    """Install the AnalysisRequest action for selective referrals."""
-    logger.info("Setup selective analysis referrals ...")
-    portal = tool.aq_inner.aq_parent
-    setup = portal.portal_setup
-    setup.runImportStepFromProfile(profile, "typeinfo")
-    logger.info("Setup selective analysis referrals [DONE]")
-
-
 def add_ajax_transitions(tool):
     """Adds the transitions from referral that should be processed async by
     default when the setting "Enable Ajax Transitions" for listings is active
