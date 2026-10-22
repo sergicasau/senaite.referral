@@ -242,8 +242,15 @@ def mark_referral_partition(partition, primary, laboratory):
 
 
 def _create_technical_analysis(partition, canonical):
-    """Add a technical analysis to an existing received partition."""
+    """Add a technical analysis to an existing received partition.
+
+    ``create_analysis`` copies the fields of the canonical analysis, which is
+    not internal use, so the technical copy has to be marked explicitly.
+    Marking only the partition is not enough: reports filter analyses
+    individually. This applies to both new and reused partitions.
+    """
     technical = create_analysis(partition, canonical)
+    technical.setInternalUse(True)
     if api.get_review_status(technical) != "unassigned":
         changeWorkflowState(
             technical,
