@@ -394,6 +394,14 @@ class OutboundSampleConsumer(object):
         wf_state = {"action": "submit"}
         changeWorkflowState(analysis, wf_id, "to_be_verified", **wf_state)
 
+        # The manual transition above bypasses core's after_submit event.
+        # Restore the promotion of the canonical sample.
+        technical_uid = get_field_value(
+            analysis, "ReferralTechnicalAnalysisUID", ""
+        )
+        if technical_uid:
+            doActionFor(analysis.getRequest(), "submit")
+
         # Auto-verify the analysis
         analysis.setSelfVerification(1)
         analysis.setNumberOfRequiredVerifications(1)
