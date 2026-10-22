@@ -62,15 +62,22 @@ class SampleAnalysesListingAdapter(object):
 
     @check_installed(None)
     def before_render(self):
-        # Modify "Valid" filter to include "referred" analyses
+        # Include referred analyses in the default view and in sample-specific
+        # filters, including the primary sample and its partitions
         for rv in self.listing.review_states:
-            if rv["id"] != "default":
+            content_filter = rv.get("contentFilter", {})
+            review_states = content_filter.get("review_state", [])
+
+            if not review_states:
                 continue
 
-            if "referred" in rv["contentFilter"]["review_state"]:
+            is_default = rv.get("id") == "default"
+            is_sample_scope = "getAncestorsUIDs" in content_filter
+            if not (is_default or is_sample_scope):
                 continue
 
-            rv["contentFilter"]["review_state"].append("referred")
+            if "referred" not in review_states:
+                review_states.append("referred")
 
     @check_installed(None)
     def folder_item(self, obj, item, index):
