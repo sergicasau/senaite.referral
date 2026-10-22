@@ -11,6 +11,7 @@ class Stub(object):
         self.uid = uid
         self.request = request
         self.ReferralTechnicalAnalysisUID = technical_uid
+        self.reindexed = []
 
     def getAnalyses(self, **kwargs):
         return self.analyses
@@ -21,8 +22,74 @@ class Stub(object):
     def getRequest(self):
         return self.request
 
+    def reindexObject(self, idxs=None):
+        self.reindexed.append(idxs)
+
 
 class SelectiveReferralTest(unittest.TestCase):
+
+    def test_partition_assignment_state_is_refreshed(self):
+        sample = Stub("sample")
+        sample.isRootAncestor = lambda: True
+        partition = Stub("partition")
+        laboratory = Stub("laboratory")
+        canonical = Stub("canonical", sample)
+        technical = Stub("technical", partition)
+
+        originals = {
+            "IAnalysisRequest": selective.IAnalysisRequest,
+            "get_object": selective.api.get_object,
+            "get_review_status": selective.api.get_review_status,
+            "validate_external_analysis_states": (
+                selective.validate_external_analysis_states
+            ),
+            "group_external_analyses": selective.group_external_analyses,
+            "get_available_partition": selective.get_available_partition,
+            "create_technical_analysis": selective._create_technical_analysis,
+            "set_correlation": selective.set_correlation,
+        }
+        try:
+            selective.IAnalysisRequest = type(
+                "AnalysisRequestInterface",
+                (),
+                {"providedBy": staticmethod(lambda obj: True)},
+            )
+            selective.api.get_object = lambda obj: obj
+            selective.api.get_review_status = lambda obj: "sample_received"
+            selective.validate_external_analysis_states = lambda obj: None
+            selective.group_external_analyses = lambda obj: {
+                "BCN": {
+                    "laboratory": laboratory,
+                    "analyses": [canonical],
+                }
+            }
+            selective.get_available_partition = lambda obj, lab: partition
+            selective._create_technical_analysis = (
+                lambda obj, analysis: technical
+            )
+            selective.set_correlation = lambda *args: None
+
+            prepared = selective.prepare_external_analyses(sample, object())
+
+            self.assertEqual([partition], prepared)
+            self.assertEqual([["assigned_state"]], partition.reindexed)
+        finally:
+            selective.IAnalysisRequest = originals["IAnalysisRequest"]
+            selective.api.get_object = originals["get_object"]
+            selective.api.get_review_status = originals["get_review_status"]
+            selective.validate_external_analysis_states = originals[
+                "validate_external_analysis_states"
+            ]
+            selective.group_external_analyses = originals[
+                "group_external_analyses"
+            ]
+            selective.get_available_partition = originals[
+                "get_available_partition"
+            ]
+            selective._create_technical_analysis = originals[
+                "create_technical_analysis"
+            ]
+            selective.set_correlation = originals["set_correlation"]
 
     def test_technical_copies_are_not_prepared_again(self):
         sample = Stub("sample")

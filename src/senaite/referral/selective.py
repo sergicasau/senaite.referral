@@ -298,6 +298,7 @@ def prepare_external_analyses(sample, request=None):
         for canonical, technical in matches:
             set_correlation(canonical, technical, laboratory)
 
+        partition.reindexObject(idxs=["assigned_state"])
         prepared.append(partition)
 
     return prepared
