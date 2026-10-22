@@ -28,6 +28,7 @@ from collections import defaultdict
 from requests.auth import HTTPBasicAuth
 from senaite.app.supermodel import SuperModel
 from senaite.core.api.dtime import date_to_string
+from senaite.core.api.dtime import to_DT
 from senaite.referral import logger
 from senaite.referral.interfaces import IExternalLaboratory
 from senaite.referral.notifications import get_post_base_info
@@ -111,6 +112,28 @@ def skip_post_action_for(obj):
     uid = api.get_uid(obj)
     uids = api.get_request().get("skip_post_action_uids", [])
     return uid in uids
+
+
+def to_iso8601(value):
+    """Returns the date passed-in as an ISO-8601 string with seconds precision
+    and UTC offset, e.g. "2026-10-22T09:41:36+02:00". Returns an empty string
+    if the value is not a valid date
+
+    Do not use `DateTime.strftime` for this purpose: it does not support the
+    `%z` directive and silently converts the time to UTC. `DateTime.ISO` is not
+    suitable either, because it drops the timezone.
+    """
+    date = to_DT(value) if value else None
+    return date.ISO8601() if date else ""
+
+
+def get_result_capture_date(analysis):
+    """Returns the date and time when the result of the analysis was captured,
+    as an ISO-8601 string that includes the UTC offset. Falls back to the date
+    when the analysis was submitted if the capture date is not set
+    """
+    captured = analysis.getResultCaptureDate()
+    return to_iso8601(captured or analysis.getDateSubmitted())
 
 
 class RemoteLab(object):
@@ -352,9 +375,7 @@ class RemoteLab(object):
             }
 
         def get_analysis_info(analysis):
-            captured = analysis.getResultCaptureDate()
-            captured = captured if captured else analysis.getDateSubmitted()
-            captured = captured.strftime("%Y-%m-%d") or ""
+            captured = get_result_capture_date(analysis)
             return {
                 "id": api.get_id(analysis),
                 "uid": api.get_uid(analysis),
