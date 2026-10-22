@@ -34,6 +34,7 @@ class AnalysisServiceSchemaExtender(object):
         ExtStringField(
             "ReferralMode",
             default="internal",
+            required=True,
             vocabulary=REFERRAL_MODES,
             schemata="Referral",
             widget=SelectionWidget(
@@ -49,6 +50,7 @@ class AnalysisServiceSchemaExtender(object):
         ExtStringField(
             "ExecutingLaboratoryCode",
             default="",
+            required=True,
             schemata="Referral",
             widget=StringWidget(
                 label=_("Executing laboratory code"),
@@ -68,8 +70,8 @@ class AnalysisServiceSchemaExtender(object):
             widget=ReferenceWidget(
                 label=_("Reference laboratory"),
                 description=_(
-                    "Destination laboratory used when execution mode is "
-                    "External."
+                    "Required when execution mode is External. Select the "
+                    "destination laboratory that performs this service."
                 ),
                 render_own_label=True,
                 catalog_name="portal_catalog",
