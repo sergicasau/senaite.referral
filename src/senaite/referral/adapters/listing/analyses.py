@@ -18,6 +18,8 @@
 # Copyright 2021-2022 by it's authors.
 # Some rights reserved, see README and LICENSE.
 
+import re
+
 from senaite.app.listing.interfaces import IListingView
 from senaite.app.listing.interfaces import IListingViewAdapter
 from senaite.referral import check_installed
@@ -31,6 +33,18 @@ from bika.lims.interfaces import IAnalysisRequest
 from bika.lims.interfaces.analysis import IRequestAnalysis
 from bika.lims.utils import get_image
 from bika.lims.utils import t
+
+
+# Statuses in which the verification of an analysis is completed
+VERIFIED_STATES = ("verified", "published")
+
+# Glue used by the listing to concatenate the elements of a cell. See
+# `AnalysesView._append_html_element` from senaite.core
+CELL_GLUE = "&nbsp;"
+
+# A standalone icon, e.g. `<img src="warning.svg" title="..." />`. Anchors
+# (multi-verification counter, link to worksheet, etc.) are not matched
+STANDALONE_ICON = re.compile(r"^\s*<img\b[^<>]*>\s*$")
 
 
 @adapter(IListingView)
@@ -78,6 +92,15 @@ class SampleAnalysesListingAdapter(object):
             # Display the reference lab verifiers instead of local
             verifiers = self.get_reference_verifiers(analysis)
             if verifiers:
+                if api.get_review_status(analysis) in VERIFIED_STATES:
+                    # Core warns about "submitted and verified by the same
+                    # user" from the local workflow history, but both
+                    # transitions were replayed by the integration account
+                    # when the remote result was imported. The reference lab
+                    # verifiers are the reliable source, so the icon below
+                    # replaces the misleading one from core
+                    self.remove_state_icons(item)
+
                 msg = t(_("Verified by reference lab: {}"))
                 verifiers = ", ".join(verifiers)
                 icon = get_image('warning.png', title=msg.format(verifiers))
@@ -101,6 +124,25 @@ class SampleAnalysesListingAdapter(object):
 
         return item
 
+    def remove_state_icons(self, item):
+        """Removes the standalone icons added by core to the status cell of
+        the item, but preserves any other content, such as the link to the
+        worksheet or the multi-verification counter
+        """
+        state_after = item.get("after") or {}
+        html = state_after.get("state_title")
+        if not html:
+            return
+
+        # elements that are not a single icon (or whose glue is not the one
+        # we expect) are kept as they are
+        parts = html.split(CELL_GLUE)
+        parts = [part for part in parts if not STANDALONE_ICON.match(part)]
+        if parts:
+            state_after["state_title"] = CELL_GLUE.join(parts)
+        else:
+            state_after.pop("state_title", None)
+
     def get_reference_analysts(self, analysis):
         """Returns a list with the names of the reference verifiers for the
         given analysis, with the reference laboratory code appended
@@ -121,7 +163,7 @@ class SampleAnalysesListingAdapter(object):
         """
         actors = ["{} ({})".format(ref.get("fullname"), ref.get("lab_code"))
                   for ref in actors]
-        return filter(None, actors)
+        return [actor for actor in actors if actor]
 
     def is_referred(self, thing):
         """Returns whether the obj has been referred to another laboratory
