@@ -22,6 +22,7 @@ from senaite.app.listing.interfaces import IListingView
 from senaite.app.listing.interfaces import IListingViewAdapter
 from senaite.referral import check_installed
 from senaite.referral import messageFactory as _
+from senaite.referral.utils import get_field_value
 from zope.component import adapter
 from zope.interface import implementer
 
@@ -60,6 +61,13 @@ class SampleAnalysesListingAdapter(object):
     @check_installed(None)
     def folder_item(self, obj, item, index):
         analysis = self.listing.get_object(obj)
+        if self.is_hidden_technical(analysis):
+            # Dismiss the row: the listing drops items cleared by subscribers
+            # and keeps "total" in sync with the rows actually displayed
+            item.clear()
+            self.listing.total = max(self.listing.total - 1, 0)
+            return item
+
         if self.is_referred(analysis):
             # Display empty in "Analyst" and "Submitter" columns
             item["replace"].update({
@@ -122,8 +130,66 @@ class SampleAnalysesListingAdapter(object):
             return thing.hasOutboundShipment()
 
         elif IRequestAnalysis.providedBy(thing):
+            # Canonical analysis delegated through a selective referral
+            if self.is_delegated(thing):
+                return True
+
+            # Technical copy that lives in the referral partition
+            if self.is_technical(thing):
+                return True
+
             sample = thing.getRequest()
             return self.is_referred(sample)
+
+    def is_delegated(self, analysis):
+        """Returns whether the analysis is a canonical analysis for which a
+        technical copy was created for the reference laboratory
+        """
+        return bool(get_field_value(
+            analysis, "ReferralTechnicalAnalysisUID", ""))
+
+    def is_technical(self, analysis):
+        """Returns whether the analysis is a technical copy, used only to
+        transport the analysis to the reference laboratory
+        """
+        return bool(get_field_value(
+            analysis, "ReferralSourceAnalysisUID", ""))
+
+    def is_hidden_technical(self, analysis):
+        """Returns whether the analysis is a technical copy that must not be
+        displayed in the current listing.
+
+        Technical copies are displayed only when the listing is explicitly
+        scoped to the partition they belong to: either the partition is the
+        context of the listing or its filter (tab) has been selected. The
+        default view of the primary sample, which includes the analyses from
+        its partitions, displays the canonical analyses only.
+        """
+        if not self.is_technical(analysis):
+            return False
+
+        partition = analysis.getRequest()
+        if not partition:
+            return False
+
+        partition_uid = api.get_uid(partition)
+        if partition_uid == api.get_uid(self.context):
+            return False
+
+        return partition_uid not in self.get_scoped_ancestors()
+
+    def get_scoped_ancestors(self):
+        """Returns the UIDs of the samples the listing is currently filtered
+        by, as done by the listing when the catalog query is built: the
+        filters of the active review state take precedence over the ones set
+        in the listing itself
+        """
+        query = dict(self.listing.contentFilter)
+        query.update(self.listing.review_state.get("contentFilter", {}))
+        uids = query.get("getAncestorsUIDs") or []
+        if not isinstance(uids, (list, tuple, set)):
+            uids = [uids]
+        return list(uids)
 
 
 @adapter(IListingView)
