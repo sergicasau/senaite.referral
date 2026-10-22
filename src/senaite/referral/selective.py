@@ -147,6 +147,7 @@ def make_delegation_id(analysis, laboratory):
 def group_external_analyses(sample):
     """Return unassigned external analyses grouped by destination lab UID."""
     groups = OrderedDict()
+    sample_uid = api.get_uid(sample)
     analyses = sample.getAnalyses(
         full_objects=True,
         review_state="unassigned",
@@ -154,6 +155,8 @@ def group_external_analyses(sample):
         sort_order="ascending",
     )
     for analysis in analyses:
+        if api.get_uid(analysis.getRequest()) != sample_uid:
+            continue
         if get_field_value(analysis, "ReferralTechnicalAnalysisUID", ""):
             continue
         service = analysis.getAnalysisService()
