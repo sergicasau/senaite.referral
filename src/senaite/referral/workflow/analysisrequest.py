@@ -261,6 +261,20 @@ def synchronize_selective_retest(invalidated, retest):
             api.get_uid(canonical_retest),
         )
         canonical_retest.reindexObject()
+
+        # The old partition is invalid, so its technical analysis must not
+        # remain apparently verified. The replacement already exists in the
+        # partition retest, therefore change the state without triggering the
+        # regular retract event (which would create another analysis retest).
+        if api.get_review_status(technical) != "retracted":
+            set_workflow_state(
+                technical,
+                ANALYSIS_WORKFLOW,
+                "retracted",
+                action="retract",
+            )
+            alsoProvides(technical, IRetracted)
+        technical.reindexObject()
         new_technical.reindexObject()
 
     # The physical aliquot is already at the reference lab, so this technical
@@ -272,3 +286,10 @@ def synchronize_selective_retest(invalidated, retest):
         action="receive_at_reference",
     )
     retest.reindexObject()
+
+    # The samples listing reads descendant UIDs from the primary sample's
+    # catalog metadata. Refresh that metadata so the new partition retest is
+    # displayed immediately when the primary sample row is expanded.
+    parent = retest.getParentAnalysisRequest()
+    if parent:
+        parent.reindexObject(idxs=["getDescendantsUIDs"])

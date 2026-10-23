@@ -3,6 +3,7 @@
 import unittest
 
 from senaite.referral import selective
+from senaite.referral.workflow import analysisrequest
 
 
 class Stub(object):
@@ -305,11 +306,133 @@ class TechnicalAnalysisCreationTest(unittest.TestCase):
         self.assertTrue(technical.internal_use)
 
 
+class SelectiveRetestSynchronizationTest(unittest.TestCase):
+    """Invalidated referral partitions must supersede technical analyses"""
+
+    def setUp(self):
+        self.primary = Stub("primary")
+        self.invalidated = Stub("partition", review_state="invalid")
+        self.retest = Stub("partition-retest", review_state="shipped")
+        self.laboratory = Stub("bcn")
+        self.canonical = Stub("canonical", review_state="retracted")
+        self.canonical_retest = Stub("canonical-retest")
+        self.technical = Stub(
+            "technical", self.invalidated, review_state="verified"
+        )
+        self.new_technical = Stub("technical-retest", self.retest)
+
+        self.technical.ReferralSourceAnalysisUID = self.canonical.uid
+        self.technical.ReferralDelegationID = "delegation-tas1"
+        self.technical.getKeyword = lambda: "TAS1"
+        self.new_technical.getKeyword = lambda: "TAS1"
+        self.invalidated.analyses = [self.technical]
+        self.retest.analyses = [self.new_technical]
+        self.canonical.getRetest = lambda: self.canonical_retest
+
+        self.retest.setOutboundShipment = lambda value: None
+        self.retest.setInvoiceExclude = lambda value: None
+        self.retest.getParentAnalysisRequest = lambda: self.primary
+
+        self.workflow_changes = []
+        self.provided = []
+
+        self._patch(
+            analysisrequest,
+            "get_partition_laboratory",
+            lambda sample: self.laboratory,
+        )
+        self._patch(
+            analysisrequest,
+            "get_field_value",
+            lambda obj, name, default=None: getattr(obj, name, default),
+        )
+        self._patch(
+            analysisrequest,
+            "set_field_value",
+            lambda obj, name, value: setattr(obj, name, value),
+        )
+        self._patch(
+            analysisrequest.api,
+            "get_object",
+            lambda uid, default=None: (
+                self.canonical if uid == self.canonical.uid else default
+            ),
+        )
+        self._patch(analysisrequest.api, "get_uid", lambda obj: obj.uid)
+        self._patch(
+            analysisrequest.api,
+            "get_review_status",
+            lambda obj: obj.review_state,
+        )
+        self._patch(
+            analysisrequest, "set_workflow_state", self._change_state
+        )
+        self._patch(
+            analysisrequest,
+            "alsoProvides",
+            lambda obj, interface: self.provided.append((obj, interface)),
+        )
+
+    def _patch(self, owner, name, value):
+        original = getattr(owner, name)
+        setattr(owner, name, value)
+        self.addCleanup(setattr, owner, name, original)
+
+    def _change_state(self, obj, workflow, state, **kwargs):
+        obj.review_state = state
+        self.workflow_changes.append((obj.uid, state, kwargs.get("action")))
+
+    def test_old_technical_analysis_is_retracted(self):
+        analysisrequest.synchronize_selective_retest(
+            self.invalidated, self.retest
+        )
+
+        self.assertEqual("retracted", self.technical.review_state)
+        self.assertIn(
+            ("technical", "retracted", "retract"), self.workflow_changes
+        )
+        self.assertIn(
+            (self.technical, analysisrequest.IRetracted), self.provided
+        )
+        self.assertEqual(
+            self.canonical_retest.uid,
+            self.new_technical.ReferralSourceAnalysisUID,
+        )
+
+    def test_retraction_is_idempotent(self):
+        analysisrequest.synchronize_selective_retest(
+            self.invalidated, self.retest
+        )
+        analysisrequest.synchronize_selective_retest(
+            self.invalidated, self.retest
+        )
+
+        transitions = [
+            change for change in self.workflow_changes
+            if change[0] == self.technical.uid
+        ]
+        self.assertEqual(
+            [("technical", "retracted", "retract")], transitions
+        )
+
+    def test_primary_descendants_are_reindexed(self):
+        analysisrequest.synchronize_selective_retest(
+            self.invalidated, self.retest
+        )
+
+        self.assertEqual(
+            [["getDescendantsUIDs"]], self.primary.reindexed
+        )
+
+
 def test_suite():
     loader = unittest.defaultTestLoader
     suite = unittest.TestSuite()
     suite.addTests(loader.loadTestsFromTestCase(SelectiveReferralTest))
     suite.addTests(loader.loadTestsFromTestCase(TechnicalAnalysisCreationTest))
+    suite.addTests(
+        loader.loadTestsFromTestCase(SelectiveRetestSynchronizationTest)
+    )
     return suite
 
 
